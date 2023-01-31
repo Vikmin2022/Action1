@@ -1,0 +1,72 @@
+name: 'Terraform'
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+
+  workflow_dispatch:
+
+jobs:
+  terraform:
+    name: 'Terraform'
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_KEY }}
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: 1.1.9
+
+    - uses: DamianReeves/write-file-action@master
+      with:
+        path: backend.tf
+        contents: |
+          terraform {
+            backend "s3" {
+              bucket = "${{ secrets.BUCKET_NAME }}"
+              key    = "state/terraform.tfstate"
+              region = "us-east-1"
+            }
+          }
+        write-mode: overwrite
+
+    - name: Verify Backend.tf
+      run: |
+        ls -R
+        cat backend.tf
+    - name: Debug
+      run: echo "$GITHUB_REF"
+
+    - name: Terraform Apply Dev
+      if: github.ref == 'refs/heads/dev'
+      run: make dev
+      env:
+        TF_VAR_environment: "dev"
+        TF_VAR_region: "us-east-1"
+        
+
+    - name: Terraform Apply QA
+      if: github.ref == 'refs/heads/qa'
+      run: make qa
+      env:
+        TF_VAR_environment: "qa"
+        TF_VAR_region: "us-east-2"
+        
+    - name: Terraform Apply Prod
+      if: github.ref == 'refs/heads/main'
+      run: make prod
+      env:
+        TF_VAR_environment: "prod"
+        TF_VAR_region: "us-west-2"
+    
